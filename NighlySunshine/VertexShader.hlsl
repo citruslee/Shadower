@@ -21,7 +21,6 @@ cbuffer cbPerObject
 	float4x4 WVP;
 	float4x4 World;
 };
-
 VS_OUTPUT main(float4 position : POSITION, float4 colour : COLOR)
 {
 	VS_OUTPUT output;

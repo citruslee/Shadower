@@ -16,6 +16,9 @@
     <Filter Include="Header Files\3rdparty">
       <UniqueIdentifier>{d1c325b6-aed3-4231-bd11-6070ef2fb0cb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\3rdparty">
+      <UniqueIdentifier>{733c5ec0-bce5-4273-aac3-506321b51fea}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="imgui.cpp">
@@ -32,6 +35,9 @@
     </ClCompile>
     <ClCompile Include="NightlySunshineMain.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sunpos.cpp">
+      <Filter>Source Files\3rdparty</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -63,6 +69,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tiny_obj_loader.h">
+      <Filter>Header Files\3rdparty</Filter>
+    </ClInclude>
+    <ClInclude Include="sunpos.h">
       <Filter>Header Files\3rdparty</Filter>
     </ClInclude>
   </ItemGroup>

@@ -487,8 +487,8 @@ bool InitScene()
 	camView = XMMatrixLookAtLH(camPosition, camTarget, camUp);
 
 	//Set the Projection matrix
-	camProjection = XMMatrixPerspectiveFovLH(0.50f*3.14f, (float)Width / Height, 1.0f, 100000.0f);
-
+	//camProjection = XMMatrixPerspectiveFovLH(0.50f*3.14f, (float)Width / Height, 1.0f, 100000.0f);
+	camProjection = XMMatrixOrthographicLH(Width, Height, 1.0f, 100000.0f);
 	D3D11_RASTERIZER_DESC cmdesc;
 
 	ZeroMemory(&cmdesc, sizeof(D3D11_RASTERIZER_DESC));
