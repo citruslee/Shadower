@@ -36,9 +36,6 @@
     <ClCompile Include="NightlySunshineMain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="sunpos.cpp">
-      <Filter>Source Files\3rdparty</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imconfig.h">
@@ -69,9 +66,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tiny_obj_loader.h">
-      <Filter>Header Files\3rdparty</Filter>
-    </ClInclude>
-    <ClInclude Include="sunpos.h">
       <Filter>Header Files\3rdparty</Filter>
     </ClInclude>
   </ItemGroup>

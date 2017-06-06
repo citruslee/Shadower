@@ -18,6 +18,7 @@
 #include <dwrite.h>
 #include <dinput.h>
 #include <d3dcompiler.h>
+#include <ctime>
 
 #include "imgui.h"
 #include "imgui_impl_dx11.hpp"
@@ -30,15 +31,12 @@
 
 using namespace DirectX;
 
-//Global Declarations - Interfaces//
 IDXGISwapChain* SwapChain;
 ID3D11Device* d3d11Device;
 ID3D11DeviceContext* d3d11DevCon;
 ID3D11RenderTargetView* renderTargetView;
-//ID3D11Buffer* squareIndexBuffer;
 ID3D11DepthStencilView* depthStencilView;
 ID3D11Texture2D* depthStencilBuffer;
-//ID3D11Buffer* squareVertBuffer;
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
 ID3D10Blob* VS_Buffer;
@@ -47,14 +45,8 @@ ID3D11InputLayout* vertLayout;
 ID3D11Buffer* cbPerObjectBuffer;
 ID3D11RasterizerState* CCWcullMode;
 ID3D11RasterizerState* CWcullMode;
-//ID3D11Buffer* cbPerFrameBuffer;
 
 ID3D11Texture2D *BackBuffer11;
-ID3D11Texture2D *sharedTex11;
-
-IDirectInputDevice8* DIKeyboard;
-IDirectInputDevice8* DIMouse;
-
 
 LPCTSTR WndClassName = L"firstwindow";
 HWND hwnd = nullptr;
@@ -63,39 +55,138 @@ HRESULT hr;
 int Width = 400;
 int Height = 300;
 
+IDirectInputDevice8* DIKeyboard;
+IDirectInputDevice8* DIMouse;
 DIMOUSESTATE mouseLastState;
 LPDIRECTINPUT8 DirectInput;
 
-float rotx = 0;
-float rotz = 0;
-float scaleX = 1.0f;
-float scaleY = 1.0f;
+class Camera
+{
+public:
 
-XMMATRIX Rotationx;
-XMMATRIX Rotationz;
+	void UpdateCamera()
+	{
+		camRotationMatrix = XMMatrixRotationRollPitchYaw(camPitch, camYaw, 0);
+		camTarget = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
+		camTarget = XMVector3Normalize(camTarget);
+
+		///////////////**************new**************////////////////////
+		/*
+		// First-Person Camera
+		XMMATRIX RotateYTempMatrix;
+		RotateYTempMatrix = XMMatrixRotationY(camYaw);
+
+		camRight = XMVector3TransformCoord(DefaultRight, RotateYTempMatrix);
+		camUp = XMVector3TransformCoord(camUp, RotateYTempMatrix);
+		camForward = XMVector3TransformCoord(DefaultForward, RotateYTempMatrix);*/
+
+		// Free-Look Camera
+		camRight = XMVector3TransformCoord(DefaultRight, camRotationMatrix);
+		camForward = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
+		camUp = XMVector3Cross(camForward, camRight);
+		///////////////**************new**************////////////////////
+
+		camPosition += moveLeftRight*camRight;
+		camPosition += moveBackForward*camForward;
+
+		moveLeftRight = 0.0f;
+		moveBackForward = 0.0f;
+
+		camTarget = camPosition + camTarget;
+
+		camView = XMMatrixLookAtLH(camPosition, camTarget, camUp);
+	}
+
+	void InitCamera(bool perspective)
+	{
+		//Camera information
+		camPosition = XMVectorSet(0.0f, 5.0f, -8.0f, 0.0f);
+		camTarget = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+		camUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+
+		//Set the View matrix
+		camView = XMMatrixLookAtLH(camPosition, camTarget, camUp);
+
+		//Set the Projection matrix
+		if (perspective)
+		{
+			camProjection = XMMatrixPerspectiveFovLH(0.50f*3.14f, (float)Width / Height, 1.0f, 100000.0f);
+		}
+		else
+		{
+			camProjection = XMMatrixOrthographicLH(Width, Height, 1.0f, 100000.0f);
+		}
+	}
+
+	void DetectInput(BYTE keyboardState[256], DIMOUSESTATE mouseCurrState, double time)
+	{
+		float speed = 1500.0f * time;
+
+		if (keyboardState[DIK_A] & 0x80)
+		{
+			moveLeftRight -= speed;
+		}
+		if (keyboardState[DIK_D] & 0x80)
+		{
+			moveLeftRight += speed;
+		}
+		if (keyboardState[DIK_W] & 0x80)
+		{
+			moveBackForward += speed;
+		}
+		if (keyboardState[DIK_S] & 0x80)
+		{
+			moveBackForward -= speed;
+		}
+		if ((mouseCurrState.lX != mouseLastState.lX) || (mouseCurrState.lY != mouseLastState.lY))
+		{
+			camYaw += mouseLastState.lX * 0.001f;
+
+			camPitch += mouseCurrState.lY * 0.001f;
+
+			mouseLastState = mouseCurrState;
+		}
+	}
+
+
+
+	float rotx = 0;
+	float rotz = 0;
+	float scaleX = 1.0f;
+	float scaleY = 1.0f;
+
+	float moveLeftRight = 0.0f;
+	float moveBackForward = 0.0f;
+
+	float camYaw = 0.0f;
+	float camPitch = 0.0f;
+
+	XMMATRIX Rotationx;
+	XMMATRIX Rotationz;
+
+	XMMATRIX cube1World;
+	XMMATRIX cube2World;
+	XMMATRIX camView;
+	XMMATRIX camProjection;
+
+	XMVECTOR camPosition;
+	XMVECTOR camTarget;
+	XMVECTOR camUp;
+	XMVECTOR DefaultForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+	XMVECTOR DefaultRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+	XMVECTOR camForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+	XMVECTOR camRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+	XMMATRIX camRotationMatrix;
+};
 
 XMMATRIX WVP;
-XMMATRIX cube1World;
-XMMATRIX cube2World;
-XMMATRIX camView;
-XMMATRIX camProjection;
 
-XMVECTOR camPosition;
-XMVECTOR camTarget;
-XMVECTOR camUp;
-XMVECTOR DefaultForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-XMVECTOR DefaultRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
-XMVECTOR camForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-XMVECTOR camRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+
+
+
 D3D11_VIEWPORT viewport;
 
-XMMATRIX camRotationMatrix;
 
-float moveLeftRight = 0.0f;
-float moveBackForward = 0.0f;
-
-float camYaw = 0.0f;
-float camPitch = 0.0f;
 
 XMMATRIX Rotation;
 XMMATRIX Scale;
@@ -123,19 +214,147 @@ bool InitScene();
 void DrawScene();
 void UpdateScene(double time);
 
-void UpdateCamera();
-
 void StartTimer();
 double GetTime();
 double GetFrameTime();
 
 bool InitializeWindow(HINSTANCE hInstance, int ShowWnd, int width, int height, bool windowed);
+extern LRESULT ImGui_ImplDX11_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 int messageloop();
 
 bool InitDirectInput(HINSTANCE hInstance);
 void DetectInput(double time);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// Declaration of some constants 
+#define pi    3.14159265358979323846
+#define twopi (2*pi)
+#define rad   (pi/180)
+#define dEarthMeanRadius     6371.01	// In km
+#define dAstronomicalUnit    149597890	// In km
+
+struct cTime
+{
+	int iYear;
+	int iMonth;
+	int iDay;
+	double dHours;
+	double dMinutes;
+	double dSeconds;
+};
+
+struct cLocation
+{
+	double dLongitude;
+	double dLatitude;
+};
+
+struct cSunCoordinates
+{
+	double dZenithAngle;
+	double dAzimuth;
+};
+
+void sunpos(cTime udtTime, cLocation udtLocation, cSunCoordinates *udtSunCoordinates)
+{
+	// Main variables
+	double dElapsedJulianDays;
+	double dDecimalHours;
+	double dEclipticLongitude;
+	double dEclipticObliquity;
+	double dRightAscension;
+	double dDeclination;
+
+	// Auxiliary variables
+	double dY;
+	double dX;
+
+	// Calculate difference in days between the current Julian Day 
+	// and JD 2451545.0, which is noon 1 January 2000 Universal Time
+	{
+		double dJulianDate;
+		long int liAux1;
+		long int liAux2;
+		// Calculate time of the day in UT decimal hours
+		dDecimalHours = udtTime.dHours + (udtTime.dMinutes
+			+ udtTime.dSeconds / 60.0) / 60.0;
+		// Calculate current Julian Day
+		liAux1 = (udtTime.iMonth - 14) / 12;
+		liAux2 = (1461 * (udtTime.iYear + 4800 + liAux1)) / 4 + (367 * (udtTime.iMonth
+			- 2 - 12 * liAux1)) / 12 - (3 * ((udtTime.iYear + 4900
+				+ liAux1) / 100)) / 4 + udtTime.iDay - 32075;
+		dJulianDate = (double)(liAux2)-0.5 + dDecimalHours / 24.0;
+		// Calculate difference between current Julian Day and JD 2451545.0 
+		dElapsedJulianDays = dJulianDate - 2451545.0;
+	}
+
+	// Calculate ecliptic coordinates (ecliptic longitude and obliquity of the 
+	// ecliptic in radians but without limiting the angle to be less than 2*Pi 
+	// (i.e., the result may be greater than 2*Pi)
+	{
+		double dMeanLongitude;
+		double dMeanAnomaly;
+		double dOmega;
+		dOmega = 2.1429 - 0.0010394594*dElapsedJulianDays;
+		dMeanLongitude = 4.8950630 + 0.017202791698*dElapsedJulianDays; // Radians
+		dMeanAnomaly = 6.2400600 + 0.0172019699*dElapsedJulianDays;
+		dEclipticLongitude = dMeanLongitude + 0.03341607*sin(dMeanAnomaly)
+			+ 0.00034894*sin(2 * dMeanAnomaly) - 0.0001134
+			- 0.0000203*sin(dOmega);
+		dEclipticObliquity = 0.4090928 - 6.2140e-9*dElapsedJulianDays
+			+ 0.0000396*cos(dOmega);
+	}
+
+	// Calculate celestial coordinates ( right ascension and declination ) in radians 
+	// but without limiting the angle to be less than 2*Pi (i.e., the result may be 
+	// greater than 2*Pi)
+	{
+		double dSin_EclipticLongitude;
+		dSin_EclipticLongitude = sin(dEclipticLongitude);
+		dY = cos(dEclipticObliquity) * dSin_EclipticLongitude;
+		dX = cos(dEclipticLongitude);
+		dRightAscension = atan2(dY, dX);
+		if (dRightAscension < 0.0) dRightAscension = dRightAscension + twopi;
+		dDeclination = asin(sin(dEclipticObliquity)*dSin_EclipticLongitude);
+	}
+
+	// Calculate local coordinates ( azimuth and zenith angle ) in degrees
+	{
+		double dGreenwichMeanSiderealTime;
+		double dLocalMeanSiderealTime;
+		double dLatitudeInRadians;
+		double dHourAngle;
+		double dCos_Latitude;
+		double dSin_Latitude;
+		double dCos_HourAngle;
+		double dParallax;
+		dGreenwichMeanSiderealTime = 6.6974243242 +
+			0.0657098283*dElapsedJulianDays
+			+ dDecimalHours;
+		dLocalMeanSiderealTime = (dGreenwichMeanSiderealTime * 15
+			+ udtLocation.dLongitude)*rad;
+		dHourAngle = dLocalMeanSiderealTime - dRightAscension;
+		dLatitudeInRadians = udtLocation.dLatitude*rad;
+		dCos_Latitude = cos(dLatitudeInRadians);
+		dSin_Latitude = sin(dLatitudeInRadians);
+		dCos_HourAngle = cos(dHourAngle);
+		udtSunCoordinates->dZenithAngle = (acos(dCos_Latitude*dCos_HourAngle
+			*cos(dDeclination) + sin(dDeclination)*dSin_Latitude));
+		dY = -sin(dHourAngle);
+		dX = tan(dDeclination)*dCos_Latitude - dSin_Latitude*dCos_HourAngle;
+		udtSunCoordinates->dAzimuth = atan2(dY, dX);
+		if (udtSunCoordinates->dAzimuth < 0.0)
+			udtSunCoordinates->dAzimuth = udtSunCoordinates->dAzimuth + twopi;
+		udtSunCoordinates->dAzimuth = udtSunCoordinates->dAzimuth / rad;
+		// Parallax Correction
+		dParallax = (dEarthMeanRadius / dAstronomicalUnit)
+			*sin(udtSunCoordinates->dZenithAngle);
+		udtSunCoordinates->dZenithAngle = (udtSunCoordinates->dZenithAngle
+			+ dParallax) / rad;
+	}
+}
 struct cbPerObject
 {
 	XMMATRIX  WVP;
@@ -181,37 +400,32 @@ D3D11_INPUT_ELEMENT_DESC layout[] =
 };
 UINT numElements = ARRAYSIZE(layout);
 
-int WINAPI WinMain(HINSTANCE hInstance,    //Main windows function
-	HINSTANCE hPrevInstance,
-	LPSTR lpCmdLine,
-	int nShowCmd)
-{
+Camera cam;
+Camera shadowCam;
 
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
+{
 	if (!InitializeWindow(hInstance, nShowCmd, Width, Height, true))
 	{
-		MessageBox(0, L"Window Initialization - Failed",
-			L"Error", MB_OK);
+		MessageBox(0, L"Window Initialization - Failed", L"Error", MB_OK);
 		return 0;
 	}
 
 	if (!InitializeDirect3d11App(hInstance))    //Initialize Direct3D
 	{
-		MessageBox(0, L"Direct3D Initialization - Failed",
-			L"Error", MB_OK);
+		MessageBox(0, L"Direct3D Initialization - Failed", L"Error", MB_OK);
 		return 0;
 	}
 
 	if (!InitScene())    //Initialize our scene
 	{
-		MessageBox(0, L"Scene Initialization - Failed",
-			L"Error", MB_OK);
+		MessageBox(0, L"Scene Initialization - Failed", L"Error", MB_OK);
 		return 0;
 	}
 
 	if (!InitDirectInput(hInstance))
 	{
-		MessageBox(0, L"Direct Input Initialization - Failed",
-			L"Error", MB_OK);
+		MessageBox(0, L"Direct Input Initialization - Failed", L"Error", MB_OK);
 		return 0;
 	}
 
@@ -332,42 +546,9 @@ bool InitDirectInput(HINSTANCE hInstance)
 	hr = DIKeyboard->SetDataFormat(&c_dfDIKeyboard);
 	hr = DIKeyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
 	hr = DIMouse->SetDataFormat(&c_dfDIMouse);
-	hr = DIMouse->SetCooperativeLevel(hwnd, DISCL_EXCLUSIVE | DISCL_NOWINKEY | DISCL_FOREGROUND);
+	hr = DIMouse->SetCooperativeLevel(hwnd, DISCL_NONEXCLUSIVE | DISCL_NOWINKEY | DISCL_FOREGROUND);
 
 	return true;
-}
-
-void UpdateCamera()
-{
-	camRotationMatrix = XMMatrixRotationRollPitchYaw(camPitch, camYaw, 0);
-	camTarget = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
-	camTarget = XMVector3Normalize(camTarget);
-
-	///////////////**************new**************////////////////////
-	/*
-	// First-Person Camera
-	XMMATRIX RotateYTempMatrix;
-	RotateYTempMatrix = XMMatrixRotationY(camYaw);
-
-	camRight = XMVector3TransformCoord(DefaultRight, RotateYTempMatrix);
-	camUp = XMVector3TransformCoord(camUp, RotateYTempMatrix);
-	camForward = XMVector3TransformCoord(DefaultForward, RotateYTempMatrix);*/
-
-	// Free-Look Camera
-	camRight = XMVector3TransformCoord(DefaultRight, camRotationMatrix);
-	camForward = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
-	camUp = XMVector3Cross(camForward, camRight);
-	///////////////**************new**************////////////////////
-
-	camPosition += moveLeftRight*camRight;
-	camPosition += moveBackForward*camForward;
-
-	moveLeftRight = 0.0f;
-	moveBackForward = 0.0f;
-
-	camTarget = camPosition + camTarget;
-
-	camView = XMMatrixLookAtLH(camPosition, camTarget, camUp);
 }
 
 void DetectInput(double time)
@@ -387,34 +568,9 @@ void DetectInput(double time)
 	{
 		PostMessage(hwnd, WM_DESTROY, 0, 0);
 	}
-	float speed = 1500.0f * time;
 
-	if (keyboardState[DIK_A] & 0x80)
-	{
-		moveLeftRight -= speed;
-	}
-	if (keyboardState[DIK_D] & 0x80)
-	{
-		moveLeftRight += speed;
-	}
-	if (keyboardState[DIK_W] & 0x80)
-	{
-		moveBackForward += speed;
-	}
-	if (keyboardState[DIK_S] & 0x80)
-	{
-		moveBackForward -= speed;
-	}
-	if ((mouseCurrState.lX != mouseLastState.lX) || (mouseCurrState.lY != mouseLastState.lY))
-	{
-		camYaw += mouseLastState.lX * 0.001f;
-
-		camPitch += mouseCurrState.lY * 0.001f;
-
-		mouseLastState = mouseCurrState;
-	}
-
-	UpdateCamera();
+	cam.DetectInput(keyboardState, mouseCurrState, time);
+	cam.UpdateCamera();
 
 	return;
 }
@@ -446,6 +602,9 @@ void CleanUp()
 
 bool InitScene()
 {
+	cam.InitCamera(true);
+	shadowCam.InitCamera(false);
+
 	//Compile Shaders from shader file
 	D3DCompileFromFile(L"VertexShader.hlsl", nullptr, nullptr, "main", "vs_5_0", 0, 0, &VS_Buffer, nullptr);
 	D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "main", "ps_5_0", 0, 0, &PS_Buffer, nullptr);
@@ -454,7 +613,6 @@ bool InitScene()
 	hr = d3d11Device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);
 	hr = d3d11Device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);
 
-	
 	m.LoadObj(d3d11Device, d3d11DevCon, "assets/testmesh.obj");
 
 	hr = d3d11Device->CreateInputLayout(layout, numElements, VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertLayout);
@@ -478,17 +636,7 @@ bool InitScene()
 
 	hr = d3d11Device->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
 
-	//Camera information
-	camPosition = XMVectorSet(0.0f, 5.0f, -8.0f, 0.0f);
-	camTarget = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-	camUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
-	//Set the View matrix
-	camView = XMMatrixLookAtLH(camPosition, camTarget, camUp);
-
-	//Set the Projection matrix
-	//camProjection = XMMatrixPerspectiveFovLH(0.50f*3.14f, (float)Width / Height, 1.0f, 100000.0f);
-	camProjection = XMMatrixOrthographicLH(Width, Height, 1.0f, 100000.0f);
 	D3D11_RASTERIZER_DESC cmdesc;
 
 	ZeroMemory(&cmdesc, sizeof(D3D11_RASTERIZER_DESC));
@@ -558,15 +706,40 @@ void DrawScene()
 	d3d11DevCon->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 	bool show_another_window = false;
 	ImVec4 clear_col = ImColor(114, 144, 154);
-
+	static int date[3];
+	static float time[3];
+	static float latlong[2];
+	static cSunCoordinates finalSunPos = cSunCoordinates();
 
 	ImGui_ImplDX11_NewFrame();
 	{
 		ImGui::SetNextWindowSize(ImVec2(200, 100), ImGuiSetCond_FirstUseEver);
 		ImGui::Begin("Outline", &show_another_window);
 		{
-			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);	
-			ImGui::Text("Camera Position (X Y Z): (%f %f %f)", camPosition.m128_f32[0], camPosition.m128_f32[1], camPosition.m128_f32[3]);
+			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+			ImGui::InputInt3("date (DD MM YYYY)", date);
+			ImGui::InputFloat3("time (HH MM SS)", time);
+			ImGui::InputFloat2("position (lat lon)", latlong);
+
+			cTime datetime;
+			datetime.iDay = date[0];
+			datetime.iMonth = date[1];
+			datetime.iYear = date[2];
+
+			datetime.dHours = time[0];
+			datetime.dMinutes = time[1];
+			datetime.dSeconds = time[2];
+
+			cLocation place;
+			place.dLatitude = latlong[0];
+			place.dLongitude = latlong[1];
+
+			if (ImGui::Button("Calculate Sun position"))
+			{
+				sunpos(datetime, place, &finalSunPos);
+			}
+
+			ImGui::Text("Sun Azimuth: %f | Sun Zenith Angle: %f", finalSunPos.dAzimuth, finalSunPos.dZenithAngle);
 		}
 		ImGui::End();
 	}
@@ -579,7 +752,7 @@ void DrawScene()
 
 	d3d11DevCon->VSSetShader(VS, 0, 0);
 	d3d11DevCon->PSSetShader(PS, 0, 0);
-	WVP = groundWorld * camView * camProjection;
+	WVP = groundWorld * cam.camView * cam.camProjection;
 	cbPerObj.WVP = XMMatrixTranspose(WVP);
 	cbPerObj.World = XMMatrixTranspose(groundWorld);
 	d3d11DevCon->UpdateSubresource(cbPerObjectBuffer, 0, nullptr, &cbPerObj, 0, 0);
@@ -598,14 +771,6 @@ int messageloop() {
 	ZeroMemory(&msg, sizeof(MSG));
 	while (true)
 	{
-		BOOL PeekMessageL(
-			LPMSG lpMsg,
-			HWND hWnd,
-			UINT wMsgFilterMin,
-			UINT wMsgFilterMax,
-			UINT wRemoveMsg
-		);
-
 		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
 		{
 			if (msg.message == WM_QUIT)
@@ -633,15 +798,17 @@ int messageloop() {
 	return msg.wParam;
 }
 
-LRESULT CALLBACK WndProc(HWND hwnd,
-	UINT msg,
-	WPARAM wParam,
-	LPARAM lParam)
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	if (ImGui_ImplDX11_WndProcHandler(hwnd, msg, wParam, lParam))
+	{
+		return true;
+	}
 	switch (msg)
 	{
 	case WM_KEYDOWN:
-		if (wParam == VK_ESCAPE) {
+		if (wParam == VK_ESCAPE)
+		{
 			DestroyWindow(hwnd);
 		}
 		return 0;
@@ -649,9 +816,18 @@ LRESULT CALLBACK WndProc(HWND hwnd,
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
+	case WM_SIZE:
+		if (d3d11Device != NULL && wParam != SIZE_MINIMIZED)
+		{
+			ImGui_ImplDX11_InvalidateDeviceObjects();
+			SwapChain->ResizeBuffers(0, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam), DXGI_FORMAT_UNKNOWN, 0);
+			ImGui_ImplDX11_CreateDeviceObjects();
+		}
+		return 0;
+	case WM_SYSCOMMAND:
+		if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
+			return 0;
+		break;
 	}
-	return DefWindowProc(hwnd,
-		msg,
-		wParam,
-		lParam);
+	return DefWindowProc(hwnd, msg, wParam, lParam);
 }

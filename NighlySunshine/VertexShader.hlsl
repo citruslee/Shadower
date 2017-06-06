@@ -21,11 +21,17 @@ cbuffer cbPerObject
 	float4x4 WVP;
 	float4x4 World;
 };
+
+
 VS_OUTPUT main(float4 position : POSITION, float4 colour : COLOR)
 {
+	float3 sun = float3(0.5f, 0.1f, 0.5f);
 	VS_OUTPUT output;
+	float4x4 temp = WVP;
+	temp[1][0] = (-sun.x / sun.y);
+	temp[1][2] = (-sun.z / sun.y);
 
-	output.position = mul(position, WVP);
+	output.position = mul(position, temp);
 	output.colour = colour;
 
 	return output;
