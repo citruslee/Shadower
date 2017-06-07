@@ -13,7 +13,6 @@
 #include <DirectXMath.h>
 #include <D3D10_1.h>
 #include <DXGI.h>
-#include <D2D1.h>
 #include <sstream>
 #include <dwrite.h>
 #include <dinput.h>
@@ -28,6 +27,7 @@
 #include "tiny_obj_loader.h"
 
 #include "Mesh.hpp"
+#include "Camera.hpp"
 
 using namespace DirectX;
 
@@ -60,133 +60,8 @@ IDirectInputDevice8* DIMouse;
 DIMOUSESTATE mouseLastState;
 LPDIRECTINPUT8 DirectInput;
 
-class Camera
-{
-public:
-
-	void UpdateCamera()
-	{
-		camRotationMatrix = XMMatrixRotationRollPitchYaw(camPitch, camYaw, 0);
-		camTarget = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
-		camTarget = XMVector3Normalize(camTarget);
-
-		///////////////**************new**************////////////////////
-		/*
-		// First-Person Camera
-		XMMATRIX RotateYTempMatrix;
-		RotateYTempMatrix = XMMatrixRotationY(camYaw);
-
-		camRight = XMVector3TransformCoord(DefaultRight, RotateYTempMatrix);
-		camUp = XMVector3TransformCoord(camUp, RotateYTempMatrix);
-		camForward = XMVector3TransformCoord(DefaultForward, RotateYTempMatrix);*/
-
-		// Free-Look Camera
-		camRight = XMVector3TransformCoord(DefaultRight, camRotationMatrix);
-		camForward = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
-		camUp = XMVector3Cross(camForward, camRight);
-		///////////////**************new**************////////////////////
-
-		camPosition += moveLeftRight*camRight;
-		camPosition += moveBackForward*camForward;
-
-		moveLeftRight = 0.0f;
-		moveBackForward = 0.0f;
-
-		camTarget = camPosition + camTarget;
-
-		camView = XMMatrixLookAtLH(camPosition, camTarget, camUp);
-	}
-
-	void InitCamera(bool perspective)
-	{
-		//Camera information
-		camPosition = XMVectorSet(0.0f, 5.0f, -8.0f, 0.0f);
-		camTarget = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-		camUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-		//Set the View matrix
-		camView = XMMatrixLookAtLH(camPosition, camTarget, camUp);
-
-		//Set the Projection matrix
-		if (perspective)
-		{
-			camProjection = XMMatrixPerspectiveFovLH(0.50f*3.14f, (float)Width / Height, 1.0f, 100000.0f);
-		}
-		else
-		{
-			camProjection = XMMatrixOrthographicLH(Width, Height, 1.0f, 100000.0f);
-		}
-	}
-
-	void DetectInput(BYTE keyboardState[256], DIMOUSESTATE mouseCurrState, double time)
-	{
-		float speed = 1500.0f * time;
-
-		if (keyboardState[DIK_A] & 0x80)
-		{
-			moveLeftRight -= speed;
-		}
-		if (keyboardState[DIK_D] & 0x80)
-		{
-			moveLeftRight += speed;
-		}
-		if (keyboardState[DIK_W] & 0x80)
-		{
-			moveBackForward += speed;
-		}
-		if (keyboardState[DIK_S] & 0x80)
-		{
-			moveBackForward -= speed;
-		}
-		if ((mouseCurrState.lX != mouseLastState.lX) || (mouseCurrState.lY != mouseLastState.lY))
-		{
-			camYaw += mouseLastState.lX * 0.001f;
-
-			camPitch += mouseCurrState.lY * 0.001f;
-
-			mouseLastState = mouseCurrState;
-		}
-	}
-
-
-
-	float rotx = 0;
-	float rotz = 0;
-	float scaleX = 1.0f;
-	float scaleY = 1.0f;
-
-	float moveLeftRight = 0.0f;
-	float moveBackForward = 0.0f;
-
-	float camYaw = 0.0f;
-	float camPitch = 0.0f;
-
-	XMMATRIX Rotationx;
-	XMMATRIX Rotationz;
-
-	XMMATRIX cube1World;
-	XMMATRIX cube2World;
-	XMMATRIX camView;
-	XMMATRIX camProjection;
-
-	XMVECTOR camPosition;
-	XMVECTOR camTarget;
-	XMVECTOR camUp;
-	XMVECTOR DefaultForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-	XMVECTOR DefaultRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
-	XMVECTOR camForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-	XMVECTOR camRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
-	XMMATRIX camRotationMatrix;
-};
-
 XMMATRIX WVP;
-
-
-
-
 D3D11_VIEWPORT viewport;
-
-
 
 XMMATRIX Rotation;
 XMMATRIX Scale;
@@ -355,34 +230,22 @@ void sunpos(cTime udtTime, cLocation udtLocation, cSunCoordinates *udtSunCoordin
 			+ dParallax) / rad;
 	}
 }
+
 struct cbPerObject
 {
+	XMMATRIX ModelViewMatrix;
+	XMMATRIX ProjectionMatrix;
+	XMMATRIX ViewMatrix;
+	XMMATRIX  _World2Receiver;
+	XMMATRIX _Object2World;
+	XMMATRIX  _World2Object;
+	XMVECTOR _Scale;
+	XMVECTOR _WorldSpaceLightPos0;
 	XMMATRIX  WVP;
 	XMMATRIX World;
 };
 
 cbPerObject cbPerObj;
-
-/*struct Light
-{
-	Light()
-	{
-		ZeroMemory(this, sizeof(Light));
-	}
-	XMFLOAT3 dir;
-	float pad;
-	XMFLOAT4 ambient;
-	XMFLOAT4 diffuse;
-};
-
-Light light;
-
-struct cbPerFrame
-{
-	Light  light;
-};
-
-cbPerFrame constbuffPerFrame;*/
 
 struct Vertex    //Overloaded Vertex Structure
 {
@@ -392,13 +255,6 @@ struct Vertex    //Overloaded Vertex Structure
 	XMFLOAT3 pos;
 	XMFLOAT4 colour;
 };
-
-D3D11_INPUT_ELEMENT_DESC layout[] =
-{
-	{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-};
-UINT numElements = ARRAYSIZE(layout);
 
 Camera cam;
 Camera shadowCam;
@@ -417,6 +273,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		return 0;
 	}
 
+	ImGui_ImplDX11_Init(hwnd, d3d11Device, d3d11DevCon);
+
 	if (!InitScene())    //Initialize our scene
 	{
 		MessageBox(0, L"Scene Initialization - Failed", L"Error", MB_OK);
@@ -429,7 +287,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		return 0;
 	}
 
-	ImGui_ImplDX11_Init(hwnd, d3d11Device, d3d11DevCon);
+	
 	messageloop();
 
 	CleanUp();
@@ -564,12 +422,12 @@ void DetectInput(double time)
 
 	DIKeyboard->GetDeviceState(sizeof(keyboardState), (LPVOID)&keyboardState);
 
-	if (keyboardState[DIK_ESCAPE] & 0x80)
+	/*if (keyboardState[DIK_ESCAPE] & 0x80)
 	{
 		PostMessage(hwnd, WM_DESTROY, 0, 0);
-	}
+	}*/
 
-	cam.DetectInput(keyboardState, mouseCurrState, time);
+	cam.DetectInput(keyboardState, mouseCurrState, mouseLastState, time);
 	cam.UpdateCamera();
 
 	return;
@@ -602,8 +460,8 @@ void CleanUp()
 
 bool InitScene()
 {
-	cam.InitCamera(true);
-	shadowCam.InitCamera(false);
+	cam.InitCamera(true, Width, Height);
+	shadowCam.InitCamera(false, Width, Height);
 
 	//Compile Shaders from shader file
 	D3DCompileFromFile(L"VertexShader.hlsl", nullptr, nullptr, "main", "vs_5_0", 0, 0, &VS_Buffer, nullptr);
@@ -615,6 +473,12 @@ bool InitScene()
 
 	m.LoadObj(d3d11Device, d3d11DevCon, "assets/testmesh.obj");
 
+	D3D11_INPUT_ELEMENT_DESC layout[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	};
+	UINT numElements = ARRAYSIZE(layout);
 	hr = d3d11Device->CreateInputLayout(layout, numElements, VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), &vertLayout);
 
 	ZeroMemory(&viewport, sizeof(D3D11_VIEWPORT));
@@ -635,7 +499,6 @@ bool InitScene()
 	cbbd.MiscFlags = 0;
 
 	hr = d3d11Device->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
-
 
 	D3D11_RASTERIZER_DESC cmdesc;
 
@@ -737,6 +600,9 @@ void DrawScene()
 			if (ImGui::Button("Calculate Sun position"))
 			{
 				sunpos(datetime, place, &finalSunPos);
+				auto sun = XMFLOAT4(0, 1, 0, 0);
+				
+				cbPerObj._WorldSpaceLightPos0 = XMVectorMultiply(XMQuaternionRotationAxis(XMVectorSet(0, 1, 0, 1), finalSunPos.dAzimuth), XMVectorSet(0, 0, 1, 1));
 			}
 
 			ImGui::Text("Sun Azimuth: %f | Sun Zenith Angle: %f", finalSunPos.dAzimuth, finalSunPos.dZenithAngle);
@@ -753,6 +619,15 @@ void DrawScene()
 	d3d11DevCon->VSSetShader(VS, 0, 0);
 	d3d11DevCon->PSSetShader(PS, 0, 0);
 	WVP = groundWorld * cam.camView * cam.camProjection;
+
+	cbPerObj.ModelViewMatrix = groundWorld * cam.camView;
+	cbPerObj.ProjectionMatrix = cam.camProjection;
+	cbPerObj.ViewMatrix = cam.camView;
+	cbPerObj._Object2World = groundWorld;
+	cbPerObj._World2Receiver = groundWorld;
+	cbPerObj._World2Object = XMMatrixInverse(nullptr, groundWorld);
+	auto sun = XMFLOAT4(1, 1, 1, 1);
+	cbPerObj._WorldSpaceLightPos0 = XMLoadFloat4(&sun);
 	cbPerObj.WVP = XMMatrixTranspose(WVP);
 	cbPerObj.World = XMMatrixTranspose(groundWorld);
 	d3d11DevCon->UpdateSubresource(cbPerObjectBuffer, 0, nullptr, &cbPerObj, 0, 0);
@@ -824,10 +699,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			ImGui_ImplDX11_CreateDeviceObjects();
 		}
 		return 0;
-	case WM_SYSCOMMAND:
-		if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
-			return 0;
-		break;
 	}
 	return DefWindowProc(hwnd, msg, wParam, lParam);
 }
