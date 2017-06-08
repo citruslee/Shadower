@@ -19,6 +19,8 @@
 #include <d3dcompiler.h>
 #include <ctime>
 
+#include "sunpos.h"
+
 #include "imgui.h"
 #include "imgui_impl_dx11.hpp"
 #include "LogWindow.hpp"
@@ -69,6 +71,9 @@ XMMATRIX Translation;
 
 XMMATRIX groundWorld;
 
+ID3D11Buffer *squareIndexBuffer;
+ID3D11Buffer *squareVertBuffer;
+
 Mesh m;
 
 float rot = 0.01f;
@@ -103,133 +108,6 @@ void DetectInput(double time);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-// Declaration of some constants 
-#define pi    3.14159265358979323846
-#define twopi (2*pi)
-#define rad   (pi/180)
-#define dEarthMeanRadius     6371.01	// In km
-#define dAstronomicalUnit    149597890	// In km
-
-struct cTime
-{
-	int iYear;
-	int iMonth;
-	int iDay;
-	double dHours;
-	double dMinutes;
-	double dSeconds;
-};
-
-struct cLocation
-{
-	double dLongitude;
-	double dLatitude;
-};
-
-struct cSunCoordinates
-{
-	double dZenithAngle;
-	double dAzimuth;
-};
-
-void sunpos(cTime udtTime, cLocation udtLocation, cSunCoordinates *udtSunCoordinates)
-{
-	// Main variables
-	double dElapsedJulianDays;
-	double dDecimalHours;
-	double dEclipticLongitude;
-	double dEclipticObliquity;
-	double dRightAscension;
-	double dDeclination;
-
-	// Auxiliary variables
-	double dY;
-	double dX;
-
-	// Calculate difference in days between the current Julian Day 
-	// and JD 2451545.0, which is noon 1 January 2000 Universal Time
-	{
-		double dJulianDate;
-		long int liAux1;
-		long int liAux2;
-		// Calculate time of the day in UT decimal hours
-		dDecimalHours = udtTime.dHours + (udtTime.dMinutes
-			+ udtTime.dSeconds / 60.0) / 60.0;
-		// Calculate current Julian Day
-		liAux1 = (udtTime.iMonth - 14) / 12;
-		liAux2 = (1461 * (udtTime.iYear + 4800 + liAux1)) / 4 + (367 * (udtTime.iMonth
-			- 2 - 12 * liAux1)) / 12 - (3 * ((udtTime.iYear + 4900
-				+ liAux1) / 100)) / 4 + udtTime.iDay - 32075;
-		dJulianDate = (double)(liAux2)-0.5 + dDecimalHours / 24.0;
-		// Calculate difference between current Julian Day and JD 2451545.0 
-		dElapsedJulianDays = dJulianDate - 2451545.0;
-	}
-
-	// Calculate ecliptic coordinates (ecliptic longitude and obliquity of the 
-	// ecliptic in radians but without limiting the angle to be less than 2*Pi 
-	// (i.e., the result may be greater than 2*Pi)
-	{
-		double dMeanLongitude;
-		double dMeanAnomaly;
-		double dOmega;
-		dOmega = 2.1429 - 0.0010394594*dElapsedJulianDays;
-		dMeanLongitude = 4.8950630 + 0.017202791698*dElapsedJulianDays; // Radians
-		dMeanAnomaly = 6.2400600 + 0.0172019699*dElapsedJulianDays;
-		dEclipticLongitude = dMeanLongitude + 0.03341607*sin(dMeanAnomaly)
-			+ 0.00034894*sin(2 * dMeanAnomaly) - 0.0001134
-			- 0.0000203*sin(dOmega);
-		dEclipticObliquity = 0.4090928 - 6.2140e-9*dElapsedJulianDays
-			+ 0.0000396*cos(dOmega);
-	}
-
-	// Calculate celestial coordinates ( right ascension and declination ) in radians 
-	// but without limiting the angle to be less than 2*Pi (i.e., the result may be 
-	// greater than 2*Pi)
-	{
-		double dSin_EclipticLongitude;
-		dSin_EclipticLongitude = sin(dEclipticLongitude);
-		dY = cos(dEclipticObliquity) * dSin_EclipticLongitude;
-		dX = cos(dEclipticLongitude);
-		dRightAscension = atan2(dY, dX);
-		if (dRightAscension < 0.0) dRightAscension = dRightAscension + twopi;
-		dDeclination = asin(sin(dEclipticObliquity)*dSin_EclipticLongitude);
-	}
-
-	// Calculate local coordinates ( azimuth and zenith angle ) in degrees
-	{
-		double dGreenwichMeanSiderealTime;
-		double dLocalMeanSiderealTime;
-		double dLatitudeInRadians;
-		double dHourAngle;
-		double dCos_Latitude;
-		double dSin_Latitude;
-		double dCos_HourAngle;
-		double dParallax;
-		dGreenwichMeanSiderealTime = 6.6974243242 +
-			0.0657098283*dElapsedJulianDays
-			+ dDecimalHours;
-		dLocalMeanSiderealTime = (dGreenwichMeanSiderealTime * 15
-			+ udtLocation.dLongitude)*rad;
-		dHourAngle = dLocalMeanSiderealTime - dRightAscension;
-		dLatitudeInRadians = udtLocation.dLatitude*rad;
-		dCos_Latitude = cos(dLatitudeInRadians);
-		dSin_Latitude = sin(dLatitudeInRadians);
-		dCos_HourAngle = cos(dHourAngle);
-		udtSunCoordinates->dZenithAngle = (acos(dCos_Latitude*dCos_HourAngle
-			*cos(dDeclination) + sin(dDeclination)*dSin_Latitude));
-		dY = -sin(dHourAngle);
-		dX = tan(dDeclination)*dCos_Latitude - dSin_Latitude*dCos_HourAngle;
-		udtSunCoordinates->dAzimuth = atan2(dY, dX);
-		if (udtSunCoordinates->dAzimuth < 0.0)
-			udtSunCoordinates->dAzimuth = udtSunCoordinates->dAzimuth + twopi;
-		udtSunCoordinates->dAzimuth = udtSunCoordinates->dAzimuth / rad;
-		// Parallax Correction
-		dParallax = (dEarthMeanRadius / dAstronomicalUnit)
-			*sin(udtSunCoordinates->dZenithAngle);
-		udtSunCoordinates->dZenithAngle = (udtSunCoordinates->dZenithAngle
-			+ dParallax) / rad;
-	}
-}
 
 struct cbPerObject
 {
@@ -273,8 +151,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		return 0;
 	}
 
-	ImGui_ImplDX11_Init(hwnd, d3d11Device, d3d11DevCon);
-
 	if (!InitScene())    //Initialize our scene
 	{
 		MessageBox(0, L"Scene Initialization - Failed", L"Error", MB_OK);
@@ -286,7 +162,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		MessageBox(0, L"Direct Input Initialization - Failed", L"Error", MB_OK);
 		return 0;
 	}
-
+	ImGui_ImplDX11_Init(hwnd, d3d11Device, d3d11DevCon);
 	
 	messageloop();
 
@@ -317,7 +193,11 @@ bool InitializeWindow(HINSTANCE hInstance, int ShowWnd, int width, int height, b
 		MessageBox(NULL, L"Error registering class", L"Error", MB_OK | MB_ICONERROR);
 		return 1;
 	}
-	hwnd = CreateWindowEx(NULL, WndClassName, L"Lesson 4 - Begin Drawing", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, width, height, NULL, NULL, hInstance, NULL);
+
+	RECT wr = { 0, 0, width, height };
+	AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
+
+	hwnd = CreateWindowEx(NULL, WndClassName, L"Lesson 4 - Begin Drawing", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, wr.right - wr.left, wr.bottom - wr.top, NULL, NULL, hInstance, NULL);
 	if (!hwnd)
 	{
 		MessageBox(NULL, L"Error creating window", L"Error", MB_OK | MB_ICONERROR);
@@ -512,6 +392,50 @@ bool InitScene()
 
 	hr = d3d11Device->CreateRasterizerState(&cmdesc, &CWcullMode);
 
+	//Create the vertex buffer
+	Vertex v[] =
+	{
+		// Bottom Face
+		Vertex(-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f),
+		Vertex(1.0f, -1.0f, -1.0f,  1.0f, 1.0f, 1.0f, 1.0f),
+		Vertex(1.0f, -1.0f,  1.0f,  1.0f, 1.0f, 1.0f, 1.0f),
+		Vertex(-1.0f, -1.0f,  1.0f, 1.0f, 1.0f, 1.0f, 1.0f),
+	};
+
+	DWORD indices[] = {
+		0,  1,  2,
+		0,  2,  3,
+	};
+
+	D3D11_BUFFER_DESC indexBufferDesc;
+	ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
+
+	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	indexBufferDesc.ByteWidth = sizeof(DWORD) * 2 * 3;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	indexBufferDesc.CPUAccessFlags = 0;
+	indexBufferDesc.MiscFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA iinitData;
+	
+	iinitData.pSysMem = indices;
+	d3d11Device->CreateBuffer(&indexBufferDesc, &iinitData, &squareIndexBuffer);
+
+	D3D11_BUFFER_DESC vertexBufferDesc;
+	ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
+
+	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 4;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.CPUAccessFlags = 0;
+	vertexBufferDesc.MiscFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA vertexBufferData;
+
+	ZeroMemory(&vertexBufferData, sizeof(vertexBufferData));
+	vertexBufferData.pSysMem = v;
+	hr = d3d11Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &squareVertBuffer);
+
 	return true;
 }
 
@@ -604,38 +528,45 @@ void DrawScene()
 				
 				cbPerObj._WorldSpaceLightPos0 = XMVectorMultiply(XMQuaternionRotationAxis(XMVectorSet(0, 1, 0, 1), finalSunPos.dAzimuth), XMVectorSet(0, 0, 1, 1));
 			}
-
 			ImGui::Text("Sun Azimuth: %f | Sun Zenith Angle: %f", finalSunPos.dAzimuth, finalSunPos.dZenithAngle);
 		}
 		ImGui::End();
 	}
 
-	d3d11DevCon->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
-	d3d11DevCon->RSSetViewports(1, &viewport);
-	d3d11DevCon->IASetInputLayout(vertLayout);
-	d3d11DevCon->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	d3d11DevCon->OMSetBlendState(0, 0, 0xffffffff);
-
-	d3d11DevCon->VSSetShader(VS, 0, 0);
-	d3d11DevCon->PSSetShader(PS, 0, 0);
 	WVP = groundWorld * cam.camView * cam.camProjection;
 
-	cbPerObj.ModelViewMatrix = groundWorld * cam.camView;
+	cbPerObj.ModelViewMatrix = XMMatrixIdentity() * cam.camView;
 	cbPerObj.ProjectionMatrix = cam.camProjection;
 	cbPerObj.ViewMatrix = cam.camView;
-	cbPerObj._Object2World = groundWorld;
+	cbPerObj._Object2World = XMMatrixIdentity();
 	cbPerObj._World2Receiver = groundWorld;
-	cbPerObj._World2Object = XMMatrixInverse(nullptr, groundWorld);
+	cbPerObj._World2Object = XMMatrixInverse(nullptr, XMMatrixIdentity());
 	auto sun = XMFLOAT4(1, 1, 1, 1);
 	cbPerObj._WorldSpaceLightPos0 = XMLoadFloat4(&sun);
 	cbPerObj.WVP = XMMatrixTranspose(WVP);
-	cbPerObj.World = XMMatrixTranspose(groundWorld);
+	cbPerObj.World = XMMatrixTranspose(XMMatrixIdentity());
+	
+
+	d3d11DevCon->IASetInputLayout(vertLayout);
+	d3d11DevCon->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	d3d11DevCon->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
+	d3d11DevCon->OMSetBlendState(0, 0, 0xffffffff);
+	d3d11DevCon->RSSetViewports(1, &viewport);
+	d3d11DevCon->RSSetState(CWcullMode);
+	d3d11DevCon->VSSetShader(VS, 0, 0);
+	d3d11DevCon->PSSetShader(PS, 0, 0);
 	d3d11DevCon->UpdateSubresource(cbPerObjectBuffer, 0, nullptr, &cbPerObj, 0, 0);
 	d3d11DevCon->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
-
-	d3d11DevCon->RSSetState(CWcullMode);
 	m.DrawMesh(d3d11DevCon);
 
+
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+	d3d11DevCon->IASetIndexBuffer(squareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+	d3d11DevCon->IASetVertexBuffers(0, 1, &squareVertBuffer, &stride, &offset);
+
+	d3d11DevCon->RSSetState(CCWcullMode);
+	d3d11DevCon->DrawIndexed(6, 0, 0);
 	ImGui::Render();
 	//Present the backbuffer to the screen
 	SwapChain->Present(0, 0);
@@ -691,8 +622,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
+	case WM_CREATE:
 	case WM_SIZE:
-		if (d3d11Device != NULL && wParam != SIZE_MINIMIZED)
+		if (d3d11Device != NULL)
 		{
 			ImGui_ImplDX11_InvalidateDeviceObjects();
 			SwapChain->ResizeBuffers(0, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam), DXGI_FORMAT_UNKNOWN, 0);

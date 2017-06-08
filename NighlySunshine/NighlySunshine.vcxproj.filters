@@ -36,6 +36,9 @@
     <ClCompile Include="NightlySunshineMain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sunpos.cpp">
+      <Filter>Source Files\3rdparty</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imconfig.h">
@@ -70,6 +73,9 @@
     </ClInclude>
     <ClInclude Include="Camera.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sunpos.h">
+      <Filter>Header Files\3rdparty</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -53,7 +53,7 @@ public:
 		}
 	}
 
-	void DetectInput(BYTE keyboardState[256], DIMOUSESTATE mouseCurrState, DIMOUSESTATE mouseLastState, double time)
+	void DetectInput(BYTE keyboardState[256], DIMOUSESTATE &mouseCurrState, DIMOUSESTATE &mouseLastState, double time)
 	{
 		float speed = 1500.0f * time;
 
@@ -83,28 +83,18 @@ public:
 		}
 	}
 
-	float rotx = 0;
-	float rotz = 0;
-	float scaleX = 1.0f;
-	float scaleY = 1.0f;
-
 	float moveLeftRight = 0.0f;
 	float moveBackForward = 0.0f;
 
 	float camYaw = 0.0f;
 	float camPitch = 0.0f;
 
-	XMMATRIX Rotationx;
-	XMMATRIX Rotationz;
-
-	XMMATRIX cube1World;
-	XMMATRIX cube2World;
 	XMMATRIX camView;
 	XMMATRIX camProjection;
-
 	XMVECTOR camPosition;
 	XMVECTOR camTarget;
 	XMVECTOR camUp;
+
 	XMVECTOR DefaultForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
 	XMVECTOR DefaultRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
 	XMVECTOR camForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);

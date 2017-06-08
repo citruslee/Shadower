@@ -24,18 +24,14 @@ VS_OUTPUT main(float4 position : POSITION, float4 colour : COLOR)
 
 	float4x4 modelMatrix = _Object2World;
 
-	float4x4 viewMatrix = ViewMatrix;// mul(modelMatrixInverse, ModelViewMatrix);
-
+	float4x4 viewMatrix = ViewMatrix;
 	float4 lightDirection;
-	
 	lightDirection = -normalize(_WorldSpaceLightPos0);
 
 	float4 vertexInWorldSpace = mul(position, modelMatrix);
 	float4 world2ReceiverRow1 = float4(_World2Receiver[1][0], _World2Receiver[1][1], _World2Receiver[1][2], _World2Receiver[1][3]);
 	float distanceOfVertex = dot(world2ReceiverRow1, vertexInWorldSpace);
-
 	float lengthOfLightDirectionInY = dot(world2ReceiverRow1, lightDirection);
-
 	if (distanceOfVertex > 0.0 && lengthOfLightDirectionInY < 0.0)
 	{
 		lightDirection = mul((distanceOfVertex / (lengthOfLightDirectionInY)), lightDirection);
