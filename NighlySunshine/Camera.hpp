@@ -35,8 +35,8 @@ public:
 	void InitCamera(bool perspective, int width, int height)
 	{
 		//Camera information
-		camPosition = XMVectorSet(0.0f, 5.0f, -8.0f, 0.0f);
-		camTarget = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+		camPosition = XMVectorSet(1000.0f, 0.0f, -0.0f, 1.0f);
+		camTarget = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 		camUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
 		//Set the View matrix
@@ -45,7 +45,7 @@ public:
 		//Set the Projection matrix
 		if (perspective)
 		{
-			camProjection = XMMatrixPerspectiveFovLH(0.50f*3.14f, (float)width / height, 1.0f, 100000.0f);
+			camProjection = XMMatrixPerspectiveFovLH(0.50f*3.14f, (float)width / height, 0.01f, 100000.0f);
 		}
 		else
 		{
@@ -55,7 +55,7 @@ public:
 
 	void DetectInput(BYTE keyboardState[256], DIMOUSESTATE &mouseCurrState, DIMOUSESTATE &mouseLastState, double time)
 	{
-		float speed = 1500.0f * time;
+		float speed = 150.0f * time;
 
 		if (keyboardState[DIK_A] & 0x80)
 		{

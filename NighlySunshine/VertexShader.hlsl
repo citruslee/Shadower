@@ -16,40 +16,54 @@ cbuffer cbPerObject
 	float4	_WorldSpaceLightPos0;
 	float4x4 WVP;
 	float4x4 World;
+	float4 sunParam;
 };
 
 VS_OUTPUT main(float4 position : POSITION, float4 colour : COLOR)
 {
 	VS_OUTPUT output;
 
-	float4x4 modelMatrix = _Object2World;
+	output.position = mul(position, WVP);
+	output.colour = colour;
 
-	float4x4 viewMatrix = ViewMatrix;
-	float4 lightDirection;
-	lightDirection = -normalize(_WorldSpaceLightPos0);
+	return output;
+}
 
-	float4 vertexInWorldSpace = mul(position, modelMatrix);
-	float4 world2ReceiverRow1 = float4(_World2Receiver[1][0], _World2Receiver[1][1], _World2Receiver[1][2], _World2Receiver[1][3]);
-	float distanceOfVertex = dot(world2ReceiverRow1, vertexInWorldSpace);
-	float lengthOfLightDirectionInY = dot(world2ReceiverRow1, lightDirection);
-	if (distanceOfVertex > 0.0 && lengthOfLightDirectionInY < 0.0)
-	{
-		lightDirection = mul((distanceOfVertex / (lengthOfLightDirectionInY)), lightDirection);
-	}
-	else
-	{
-		lightDirection = float4(0.0, 0.0, 0.0, 0.0);
-	}
+void Rotate(inout float2 v, float rad)
+{
+	float2 temp = v;
+	v.x = cos(rad) * temp.x + sin(rad) * temp.y;
+	v.y = -sin(rad) * temp.x + cos(rad) * temp.y;
+}
 
-	output.position = mul((vertexInWorldSpace + lightDirection), mul(viewMatrix, ProjectionMatrix));
+float deg2rad(float deg)
+{
+	float rad = 0;
+	rad = (deg * 3.14159f / 180.0f);
+	return rad;
+}
 
-	/*float3 sun = float3(-0.5f, -0.1f, -0.5f);
-	
-	float4x4 temp = WVP;
-	temp[1][0] = (-sun.x / sun.y);
-	temp[1][2] = (-sun.z / sun.y);
+VS_OUTPUT shadowmain(float4 position : POSITION, float4 colour : COLOR)
+{
+	VS_OUTPUT output;
 
-	output.position = mul(position, temp);*/
+	float4 planePoint = float4(0.0f, 0.0f, 0.0f, 1.0f);
+	float4 planeNormal = float4(0.0f, 1.0f, 0.0f, 1.0f);
+
+	float3 sun = normalize(float3(0.0f, 1.0f, 0.0f));
+
+	Rotate(sun.xy, deg2rad(sunParam.x));
+	Rotate(sun.xz, deg2rad(sunParam.y));
+
+	float sunDir = dot(sun, planeNormal);
+	float3 offset = sun - (planeNormal * sunDir);
+
+	float4 vertexWorldPos = mul(position, _Object2World);
+	float3 difference = planePoint.xyz - vertexWorldPos.xyz;
+	float distanceToPlane = dot(difference, planeNormal);
+	//float3 projectedVertex = vertexWorldPos.xyz + (distanceToPlane * (planeNormal.xyz + (offset / sunDir)));
+	float3 projectedVertex = vertexWorldPos.xyz + (distanceToPlane * (planeNormal.xyz + offset));
+	output.position = mul(float4(projectedVertex, 1.0), mul(ViewMatrix, ProjectionMatrix));
 	output.colour = colour;
 
 	return output;

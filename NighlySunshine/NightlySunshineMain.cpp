@@ -39,10 +39,17 @@ ID3D11DeviceContext* d3d11DevCon;
 ID3D11RenderTargetView* renderTargetView;
 ID3D11DepthStencilView* depthStencilView;
 ID3D11Texture2D* depthStencilBuffer;
+
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
 ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
+
+ID3D11VertexShader* VSShadow;
+ID3D11PixelShader* PSShadow;
+ID3D10Blob* VS_BufferShadow;
+ID3D10Blob* PS_BufferShadow;
+
 ID3D11InputLayout* vertLayout;
 ID3D11Buffer* cbPerObjectBuffer;
 ID3D11RasterizerState* CCWcullMode;
@@ -54,8 +61,8 @@ LPCTSTR WndClassName = L"firstwindow";
 HWND hwnd = nullptr;
 HRESULT hr;
 
-int Width = 400;
-int Height = 300;
+int Width = 1600;
+int Height = 900;
 
 IDirectInputDevice8* DIKeyboard;
 IDirectInputDevice8* DIMouse;
@@ -121,11 +128,12 @@ struct cbPerObject
 	XMVECTOR _WorldSpaceLightPos0;
 	XMMATRIX  WVP;
 	XMMATRIX World;
+	XMVECTOR sunParam;
 };
 
 cbPerObject cbPerObj;
 
-struct Vertex    //Overloaded Vertex Structure
+struct Vertex //Overloaded Vertex Structure
 {
 	Vertex() {}
 	Vertex(float x, float y, float z, float r, float g, float b, float a) : pos(x, y, z), colour(r, g, b, a){}
@@ -340,7 +348,7 @@ void CleanUp()
 
 bool InitScene()
 {
-	cam.InitCamera(true, Width, Height);
+	cam.InitCamera(false, Width, Height);
 	shadowCam.InitCamera(false, Width, Height);
 
 	//Compile Shaders from shader file
@@ -350,6 +358,11 @@ bool InitScene()
 	//Create the Shader Objects
 	hr = d3d11Device->CreateVertexShader(VS_Buffer->GetBufferPointer(), VS_Buffer->GetBufferSize(), NULL, &VS);
 	hr = d3d11Device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);
+
+	D3DCompileFromFile(L"VertexShader.hlsl", nullptr, nullptr, "shadowmain", "vs_5_0", 0, 0, &VS_BufferShadow, nullptr);
+	D3DCompileFromFile(L"PixelShader.hlsl", nullptr, nullptr, "shadowmain", "ps_5_0", 0, 0, &PS_BufferShadow, nullptr);
+	hr = d3d11Device->CreateVertexShader(VS_BufferShadow->GetBufferPointer(), VS_BufferShadow->GetBufferSize(), NULL, &VSShadow);
+	hr = d3d11Device->CreatePixelShader(PS_BufferShadow->GetBufferPointer(), PS_BufferShadow->GetBufferSize(), NULL, &PSShadow);
 
 	m.LoadObj(d3d11Device, d3d11DevCon, "assets/testmesh.obj");
 
@@ -487,10 +500,6 @@ void UpdateScene(double time)
 
 void DrawScene()
 {
-	//Clear our render target and depth/stencil view
-	float bgColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-	d3d11DevCon->ClearRenderTargetView(renderTargetView, bgColor);
-	d3d11DevCon->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 	bool show_another_window = false;
 	ImVec4 clear_col = ImColor(114, 144, 154);
 	static int date[3];
@@ -524,9 +533,10 @@ void DrawScene()
 			if (ImGui::Button("Calculate Sun position"))
 			{
 				sunpos(datetime, place, &finalSunPos);
-				auto sun = XMFLOAT4(0, 1, 0, 0);
+				auto sun = XMFLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
 				
-				cbPerObj._WorldSpaceLightPos0 = XMVectorMultiply(XMQuaternionRotationAxis(XMVectorSet(0, 1, 0, 1), finalSunPos.dAzimuth), XMVectorSet(0, 0, 1, 1));
+				cbPerObj._WorldSpaceLightPos0 = XMVectorMultiply(XMQuaternionRotationAxis(XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f), finalSunPos.dAzimuth), XMVectorSet(0.0f, 0.0f, 1.0f, 1.0f));
+				cbPerObj.sunParam = XMVectorSet(finalSunPos.dAzimuth, finalSunPos.dZenithAngle, 0.0f, 0.0f);
 			}
 			ImGui::Text("Sun Azimuth: %f | Sun Zenith Angle: %f", finalSunPos.dAzimuth, finalSunPos.dZenithAngle);
 		}
@@ -536,16 +546,19 @@ void DrawScene()
 	WVP = groundWorld * cam.camView * cam.camProjection;
 
 	cbPerObj.ModelViewMatrix = XMMatrixIdentity() * cam.camView;
-	cbPerObj.ProjectionMatrix = cam.camProjection;
-	cbPerObj.ViewMatrix = cam.camView;
-	cbPerObj._Object2World = XMMatrixIdentity();
+	cbPerObj.ProjectionMatrix = XMMatrixTranspose(cam.camProjection);
+	cbPerObj.ViewMatrix = XMMatrixTranspose(cam.camView);
+	cbPerObj._Object2World = XMMatrixTranspose(groundWorld);
 	cbPerObj._World2Receiver = groundWorld;
 	cbPerObj._World2Object = XMMatrixInverse(nullptr, XMMatrixIdentity());
-	auto sun = XMFLOAT4(1, 1, 1, 1);
+	auto sun = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	cbPerObj._WorldSpaceLightPos0 = XMLoadFloat4(&sun);
 	cbPerObj.WVP = XMMatrixTranspose(WVP);
 	cbPerObj.World = XMMatrixTranspose(XMMatrixIdentity());
 	
+	float bgColor[4] = { 0.9f, 0.9f, 0.1f, 1.0f };
+	d3d11DevCon->ClearRenderTargetView(renderTargetView, bgColor);
+	d3d11DevCon->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	d3d11DevCon->IASetInputLayout(vertLayout);
 	d3d11DevCon->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -553,26 +566,28 @@ void DrawScene()
 	d3d11DevCon->OMSetBlendState(0, 0, 0xffffffff);
 	d3d11DevCon->RSSetViewports(1, &viewport);
 	d3d11DevCon->RSSetState(CWcullMode);
+
+	//draw the shadow
+	d3d11DevCon->VSSetShader(VSShadow, 0, 0);
+	d3d11DevCon->PSSetShader(PSShadow, 0, 0);
+	d3d11DevCon->UpdateSubresource(cbPerObjectBuffer, 0, nullptr, &cbPerObj, 0, 0);
+	d3d11DevCon->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
+	m.DrawMesh(d3d11DevCon);
+
+	//draw the geometry
 	d3d11DevCon->VSSetShader(VS, 0, 0);
 	d3d11DevCon->PSSetShader(PS, 0, 0);
 	d3d11DevCon->UpdateSubresource(cbPerObjectBuffer, 0, nullptr, &cbPerObj, 0, 0);
 	d3d11DevCon->VSSetConstantBuffers(0, 1, &cbPerObjectBuffer);
 	m.DrawMesh(d3d11DevCon);
 
-
-	UINT stride = sizeof(Vertex);
-	UINT offset = 0;
-	d3d11DevCon->IASetIndexBuffer(squareIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
-	d3d11DevCon->IASetVertexBuffers(0, 1, &squareVertBuffer, &stride, &offset);
-
-	d3d11DevCon->RSSetState(CCWcullMode);
-	d3d11DevCon->DrawIndexed(6, 0, 0);
 	ImGui::Render();
 	//Present the backbuffer to the screen
 	SwapChain->Present(0, 0);
 }
 
-int messageloop() {
+int messageloop() 
+{
 	MSG msg;
 	ZeroMemory(&msg, sizeof(MSG));
 	while (true)
