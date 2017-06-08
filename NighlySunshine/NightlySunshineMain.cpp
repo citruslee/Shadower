@@ -118,16 +118,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 struct cbPerObject
 {
-	XMMATRIX ModelViewMatrix;
 	XMMATRIX ProjectionMatrix;
 	XMMATRIX ViewMatrix;
-	XMMATRIX  _World2Receiver;
 	XMMATRIX _Object2World;
-	XMMATRIX  _World2Object;
-	XMVECTOR _Scale;
-	XMVECTOR _WorldSpaceLightPos0;
 	XMMATRIX  WVP;
-	XMMATRIX World;
 	XMVECTOR sunParam;
 };
 
@@ -348,7 +342,7 @@ void CleanUp()
 
 bool InitScene()
 {
-	cam.InitCamera(false, Width, Height);
+	cam.InitCamera(true, Width, Height);
 	shadowCam.InitCamera(false, Width, Height);
 
 	//Compile Shaders from shader file
@@ -535,7 +529,6 @@ void DrawScene()
 				sunpos(datetime, place, &finalSunPos);
 				auto sun = XMFLOAT4(0.0f, 1.0f, 0.0f, 0.0f);
 				
-				cbPerObj._WorldSpaceLightPos0 = XMVectorMultiply(XMQuaternionRotationAxis(XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f), finalSunPos.dAzimuth), XMVectorSet(0.0f, 0.0f, 1.0f, 1.0f));
 				cbPerObj.sunParam = XMVectorSet(finalSunPos.dAzimuth, finalSunPos.dZenithAngle, 0.0f, 0.0f);
 			}
 			ImGui::Text("Sun Azimuth: %f | Sun Zenith Angle: %f", finalSunPos.dAzimuth, finalSunPos.dZenithAngle);
@@ -545,16 +538,11 @@ void DrawScene()
 
 	WVP = groundWorld * cam.camView * cam.camProjection;
 
-	cbPerObj.ModelViewMatrix = XMMatrixIdentity() * cam.camView;
 	cbPerObj.ProjectionMatrix = XMMatrixTranspose(cam.camProjection);
 	cbPerObj.ViewMatrix = XMMatrixTranspose(cam.camView);
 	cbPerObj._Object2World = XMMatrixTranspose(groundWorld);
-	cbPerObj._World2Receiver = groundWorld;
-	cbPerObj._World2Object = XMMatrixInverse(nullptr, XMMatrixIdentity());
 	auto sun = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	cbPerObj._WorldSpaceLightPos0 = XMLoadFloat4(&sun);
 	cbPerObj.WVP = XMMatrixTranspose(WVP);
-	cbPerObj.World = XMMatrixTranspose(XMMatrixIdentity());
 	
 	float bgColor[4] = { 0.9f, 0.9f, 0.1f, 1.0f };
 	d3d11DevCon->ClearRenderTargetView(renderTargetView, bgColor);
