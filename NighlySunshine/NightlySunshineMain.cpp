@@ -391,7 +391,7 @@ bool InitScene()
 
 	ZeroMemory(&cmdesc, sizeof(D3D11_RASTERIZER_DESC));
 	cmdesc.FillMode = D3D11_FILL_SOLID;
-	cmdesc.CullMode = D3D11_CULL_BACK;
+	cmdesc.CullMode = D3D11_CULL_NONE;
 	cmdesc.FrontCounterClockwise = true;
 	hr = d3d11Device->CreateRasterizerState(&cmdesc, &CCWcullMode);
 
@@ -495,10 +495,9 @@ void UpdateScene(double time)
 void DrawScene()
 {
 	bool show_another_window = false;
-	ImVec4 clear_col = ImColor(114, 144, 154);
-	static int date[3];
-	static float time[3];
-	static float latlong[2];
+	static int date[3] = {20, 6, 2017};
+	static float time[3] = {12.0f, 0.0f, 0.0f};
+	static float latlong[2] = { 48.148246f, 17.107073f };
 	static cSunCoordinates finalSunPos = cSunCoordinates();
 
 	ImGui_ImplDX11_NewFrame();

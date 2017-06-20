@@ -57,8 +57,8 @@ public:
 			{
 				VERTEX v = {};
 				v.pos.x = mesh.positions[i * 3 + 0];
-				v.pos.y = mesh.positions[i * 3 + 1];
-				v.pos.z = mesh.positions[i * 3 + 2];
+				v.pos.z = mesh.positions[i * 3 + 1];
+				v.pos.y = mesh.positions[i * 3 + 2];
 				v.color = DirectX::XMFLOAT4(0.5, 0.5, 0.5, 1);
 				vertices.push_back(v);
 			}

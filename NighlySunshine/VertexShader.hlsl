@@ -54,9 +54,16 @@ VS_OUTPUT shadowmain(float4 position : POSITION, float4 colour : COLOR)
 	float3 sun = normalize(float3(0.0f, 1.0f, 0.0f));
 
 	//transform the sun by azimuth and zenith angle data
-	Rotate(sun.xy, deg2rad(sunParam.x));	//azimuth
-	Rotate(sun.xz, deg2rad(sunParam.y));	//zenith
-
+	//if (sunParam.x > 180.0f)
+	{
+		Rotate(sun.xy, deg2rad(sunParam.x));	//azimuth
+		Rotate(sun.xz, deg2rad(sunParam.y));	//zenith
+	}
+	/*else
+	{
+		Rotate(sun.xy, deg2rad(sunParam.x));	//azimuth
+		Rotate(sun.xz, deg2rad(sunParam.y));	//zenith
+	}*/
 	//calculate where is the sun directing at
 	float sunDir = dot(sun, planeNormal);
 	float3 offset = sun - (planeNormal * sunDir);

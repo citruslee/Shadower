@@ -8,35 +8,69 @@ using namespace DirectX;
 class Camera
 {
 public:
+#define DEFAULTHEIGHT 100.0f
+	double deg2rad(double degrees) {
+		return degrees * 4.0 * atan(1.0) / 180.0;
+	}
+
+	//Custom LookAt method which is not inverted like in DirectXMath
+	//works the very same though
+	XMMATRIX LookAt(XMVECTOR pos, XMVECTOR target, XMVECTOR up)
+	{
+		//float3 z = normalize(target - pos);
+		//float3 y = normalize(upVector);
+		//float3 x = normalize(cross(y, z));
+		//y = cross(z, x);
+		auto z = XMVector3Normalize(target - pos);
+		auto y = XMVector3Normalize(up);
+		auto x = XMVector3Normalize(XMVector3Cross(y, z));
+		y = XMVector3Cross(z, x);
+
+		auto lookatmat = XMMatrixSet(x.m128_f32[0], x.m128_f32[1], x.m128_f32[2], 0, y.m128_f32[0], y.m128_f32[1], y.m128_f32[2], 0, z.m128_f32[0], z.m128_f32[1], z.m128_f32[2], 0, pos.m128_f32[0], pos.m128_f32[1], pos.m128_f32[2], 1);
+		return lookatmat;
+	}
 
 	void UpdateCamera()
 	{
-		camRotationMatrix = XMMatrixRotationRollPitchYaw(camPitch, camYaw, 0);
+		XMVECTOR DefaultForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+		XMVECTOR DefaultRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+		XMVECTOR DefaultUp = XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f);
+		XMVECTOR camForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+		XMVECTOR camTopDown = XMVectorSet(0.0f, DEFAULTHEIGHT, 1.0f, 0.0f);
+		XMVECTOR camRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+		
+		XMMATRIX camRotationMatrix;
+
+		camRotationMatrix = XMMatrixRotationRollPitchYaw(deg2rad(90), 0, 0);
 		camTarget = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
 		camTarget = XMVector3Normalize(camTarget);
 
 		// Free-Look Camera
+		camForward = XMVector3TransformCoord(DefaultUp, camRotationMatrix);
+		camTopDown = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
 		camRight = XMVector3TransformCoord(DefaultRight, camRotationMatrix);
-		camForward = XMVector3TransformCoord(DefaultForward, camRotationMatrix);
 		camUp = XMVector3Cross(camForward, camRight);
 		///////////////**************new**************////////////////////
 
 		camPosition += moveLeftRight*camRight;
 		camPosition += moveBackForward*camForward;
-
+		camPosition += moveTopDown*camTopDown;
 		moveLeftRight = 0.0f;
 		moveBackForward = 0.0f;
+		moveTopDown = 0.0f;
 
 		camTarget = camPosition + camTarget;
 
-		camView = XMMatrixLookAtLH(camPosition, camTarget, camUp);
+		camView = LookAt(camPosition, camTarget, camUp);
+
+		camView = XMMatrixInverse(nullptr, camView);
 	}
 
 	void InitCamera(bool perspective, int width, int height)
 	{
 		//Camera information
-		camPosition = XMVectorSet(1000.0f, 0.0f, -0.0f, 1.0f);
-		camTarget = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+		camPosition = XMVectorSet(1.0f, DEFAULTHEIGHT, 0.0f, 1.0f);
+		camTarget = XMVectorSet(0.1f, 0.1f, 0.1f, 1.0f);
 		camUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
 		//Set the View matrix
@@ -67,27 +101,26 @@ public:
 		}
 		if (keyboardState[DIK_W] & 0x80)
 		{
-			moveBackForward += speed;
+			moveBackForward -= speed;
 		}
 		if (keyboardState[DIK_S] & 0x80)
 		{
-			moveBackForward -= speed;
+			moveBackForward += speed;
 		}
-		if ((mouseCurrState.lX != mouseLastState.lX) || (mouseCurrState.lY != mouseLastState.lY))
+		if (keyboardState[DIK_Q] & 0x80)
 		{
-			camYaw += mouseLastState.lX * 0.001f;
-
-			camPitch += mouseCurrState.lY * 0.001f;
-
-			mouseLastState = mouseCurrState;
+			moveTopDown -= speed;
 		}
+		if (keyboardState[DIK_E] & 0x80)
+		{
+			moveTopDown += speed;
+		}
+		
 	}
 
 	float moveLeftRight = 0.0f;
 	float moveBackForward = 0.0f;
-
-	float camYaw = 0.0f;
-	float camPitch = 0.0f;
+	float moveTopDown = 0.0f;
 
 	XMMATRIX camView;
 	XMMATRIX camProjection;
@@ -95,9 +128,5 @@ public:
 	XMVECTOR camTarget;
 	XMVECTOR camUp;
 
-	XMVECTOR DefaultForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-	XMVECTOR DefaultRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
-	XMVECTOR camForward = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-	XMVECTOR camRight = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
-	XMMATRIX camRotationMatrix;
+#undef DEFAULTHEIGHT	
 };
